@@ -219,10 +219,13 @@ class Launch private[xsbt] (val bootDirectory: File, val lockBoot: Boolean, val 
         else
           existing(app, ScalaOrg, explicitScalaVersion, baseDirs(None)) getOrElse retrieve()
 
-      case class TestInterfaceLoader(jar: File, parent: ClassLoader) extends URLClassLoader(Array(jar.toURI.toURL), topLoader)
+      case class TestInterfaceLoader(jars: Array[File], parent: ClassLoader) extends URLClassLoader(jars.map(_.toURI.toURL), topLoader)
       val testInterface = java.util.regex.Pattern.compile("test-interface-[0-9.]+\\.jar")
-      retrievedApp.fullClasspath.find(f => testInterface.matcher(f.getName).find()).foreach { f =>
-        scalaProviderClassLoader.set(TestInterfaceLoader(f, initLoader))
+      val jline = java.util.regex.Pattern.compile("(jansi|jline)-.*\\.jar")
+      def isEarly(f: File) = testInterface.matcher(f.getName).find() || jline.matcher(f.getName).find()
+      val earlyJars = retrievedApp.fullClasspath.filter(isEarly)
+      if (earlyJars.nonEmpty) {
+        scalaProviderClassLoader.set(TestInterfaceLoader(earlyJars, initLoader))
       }
       // https://github.com/sbt/sbt/issues/4955
       // When sbt core artifacts are not properly downloaded, this the point that fails with "No Scala version specified or detected"
